@@ -42,6 +42,7 @@
             useCookie: false,
             maxScale: "months",
             minScale: "hours",
+            hourRange: false,
             waitText: "Please wait...",
             onItemClick: function (data) { return; },
             onAddClick: function (data) { return; },
@@ -437,7 +438,7 @@
                     // **Hours**
                     case "hours":
 
-                        range = tools.parseTimeRange(element.dateStart, element.dateEnd, element.scaleStep);
+                        range = tools.parseTimeRange(element.dateStart, element.dateEnd, element.scaleStep, settings.hourRange);
 
                         var year = range[0].getFullYear();
                         var month = range[0].getMonth();
@@ -1020,6 +1021,7 @@
 
                                     var cFrom = from.attr("offset");
                                     var cTo = to.attr("offset");
+
                                     var dl = Math.floor((cTo - cFrom) / tools.getCellSize()) + 1;
 
                                     _bar = core.createProgressBar(
@@ -1520,21 +1522,22 @@
 
             // Return an array of Date objects between `from` and `to`,
             // scaled hourly
-            parseTimeRange: function (from, to, scaleStep) {
+            parseTimeRange: function (from, to, scaleStep, hourRange) {
                 var current = new Date(from);
                 var end = new Date(to);
-                var ret = [];
-                var i = 0;
+                var ret = [], i = 0, t;
                 do {
-                    ret[i] = new Date(current.getTime());
+                    t = new Date(current.getTime());
                     current.setHours(current.getHours() + scaleStep);
                     current.setHours(Math.floor((current.getHours()) / scaleStep) * scaleStep);
 
-                    if (current.getDay() !== ret[i].getDay()) {
+                    if (current.getDay() !== t.getDay()) {
                         current.setHours(0);
                     }
 
-                    i++;
+                    if (!hourRange || (hourRange.from <= t.getHours() && t.getHours() <= hourRange.to)) {
+                        ret[i++] = t;
+                    }
                 } while (current.getTime() <= to.getTime());
                 return ret;
             },
@@ -1684,6 +1687,7 @@
 
             switch (settings.scale) {
                 case "hours": this.headerRows = 5; this.scaleStep = 1; break;
+                case "compacthours": this.headerRows = 5; this.scaleStep = 12; break;
                 case "weeks": this.headerRows = 3; this.scaleStep = 13; break;
                 case "months": this.headerRows = 2; this.scaleStep = 14; break;
                 default: this.headerRows = 4; this.scaleStep = 13; break;
