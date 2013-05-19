@@ -42,7 +42,6 @@
             useCookie: false,
             maxScale: "months",
             minScale: "hours",
-            hourRange: false,
             waitText: "Please wait...",
             onItemClick: function (data) { return; },
             onAddClick: function (data) { return; },
@@ -438,7 +437,7 @@
                     // **Hours**
                     case "hours":
 
-                        range = tools.parseTimeRange(element.dateStart, element.dateEnd, element.scaleStep, settings.hourRange);
+                        range = tools.parseTimeRange(element.dateStart, element.dateEnd, element.scaleStep);
 
                         var year = range[0].getFullYear();
                         var month = range[0].getMonth();
@@ -673,13 +672,14 @@
                     default:
                         range = tools.parseDateRange(element.dateStart, element.dateEnd);
 
-                        var year = range[0].getFullYear();
-                        var month = range[0].getMonth();
-                        var day = range[0];
+						var dateBefore = ktkGetNextDate(range[0], -1);
+                        var year = dateBefore.getFullYear();
+                        var month = dateBefore.getMonth();
+                        var day = dateBefore;
 
                         for (var i = 0; i < range.length; i++) {
                             var rday = range[i];
-
+							
                             // Fill years
                             if (rday.getFullYear() !== year) {
                                 yearArr.push(
@@ -692,7 +692,6 @@
                                 daysInYear = 0;
                             }
                             daysInYear++;
-
 
                             // Fill months
                             if (rday.getMonth() !== month) {
@@ -721,7 +720,6 @@
                                     + ' <div class="fn-label">' + settings.dow[getDay] + '</div></div>');
                         } //for
 
-
                         // Last year
                         yearArr.push(
                             '<div class="row header year" style="width: '
@@ -735,7 +733,7 @@
                             + tools.getCellSize() * daysInMonth + 'px"><div class="fn-label">'
                             + settings.months[month]
                             + '</div></div>');
-
+						
                         var dataPanel = core.dataPanel(element, range.length * tools.getCellSize());
 
 
@@ -1021,7 +1019,6 @@
 
                                     var cFrom = from.attr("offset");
                                     var cTo = to.attr("offset");
-
                                     var dl = Math.floor((cTo - cFrom) / tools.getCellSize()) + 1;
 
                                     _bar = core.createProgressBar(
@@ -1522,23 +1519,36 @@
 
             // Return an array of Date objects between `from` and `to`,
             // scaled hourly
-            parseTimeRange: function (from, to, scaleStep, hourRange) {
+            parseTimeRange: function (from, to, scaleStep) {
                 var current = new Date(from);
                 var end = new Date(to);
-                var ret = [], i = 0, t;
-                do {
-                    t = new Date(current.getTime());
-                    current.setHours(current.getHours() + scaleStep);
-                    current.setHours(Math.floor((current.getHours()) / scaleStep) * scaleStep);
-
-                    if (current.getDay() !== t.getDay()) {
-                        current.setHours(0);
+                var ret = [];
+                var i = 0;
+                for(;;) {
+					var dayStartTime = new Date(current);
+					dayStartTime.setHours(Math.floor((current.getHours()) / scaleStep) * scaleStep);
+					
+                    if (ret[i] && dayStartTime.getDay() !== ret[i].getDay()) {
+						// If mark-cursor jumped to next day, make sure it starts at 0 hours
+						dayStartTime.setHours(0);
                     }
+					ret[i] = dayStartTime;
 
-                    if (!hourRange || (hourRange.from <= t.getHours() && t.getHours() <= hourRange.to)) {
-                        ret[i++] = t;
+					// Note that we use ">" because we want to include the end-time point.
+					if(current.getTime() > to.getTime()) break;
+
+					/* BUG-2: current is moved backwards producing a dead-lock! (crashes chrome/IE/firefox)
+					 * SEE: https://github.com/taitems/jQuery.Gantt/issues/62
+                    if (current.getDay() !== ret[i].getDay()) {
+                       current.setHours(0);
                     }
-                } while (current.getTime() <= to.getTime());
+					*/
+
+					current = ktkGetNextDate(current, scaleStep);
+
+                    i++;
+                };
+				
                 return ret;
             },
 
@@ -1686,8 +1696,8 @@
             }
 
             switch (settings.scale) {
+                //case "hours": this.headerRows = 5; this.scaleStep = 8; break;
                 case "hours": this.headerRows = 5; this.scaleStep = 1; break;
-                case "compacthours": this.headerRows = 5; this.scaleStep = 12; break;
                 case "weeks": this.headerRows = 3; this.scaleStep = 13; break;
                 case "months": this.headerRows = 2; this.scaleStep = 14; break;
                 default: this.headerRows = 4; this.scaleStep = 13; break;
@@ -1712,3 +1722,17 @@
 
     };
 })(jQuery);
+
+function ktkGetNextDate(currentDate, scaleStep) {
+	for(var minIncrements = 1;; minIncrements++) {
+		var nextDate = new Date(currentDate);
+		nextDate.setHours(currentDate.getHours() + scaleStep * minIncrements);
+
+		if(nextDate.getTime() != currentDate.getTime()) {
+			return nextDate;
+		}
+
+		// If code reaches here, it's because current didn't really increment (invalid local time) because of daylight-saving adjustments
+		// => retry adding 2, 3, 4 hours, and so on (until nextDate > current)
+	}	
+}
